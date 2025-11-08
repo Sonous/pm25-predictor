@@ -1,0 +1,51 @@
+data/
+# .md/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Environment
+.env.local
+.venv
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Models
+models/*.h5
+models/*.pkl
+models/*.pt
+models/*.pth
+models/*.keras
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+
+# OS
+Thumbs.db
+.DS_Store
