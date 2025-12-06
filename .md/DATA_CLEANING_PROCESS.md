@@ -4,13 +4,16 @@
 
 Tài liệu này mô tả chi tiết quy trình làm sạch dữ liệu cho dự án dự đoán chỉ số PM2.5 sử dụng dữ liệu từ **các trạm quan trắc Hong Kong** với ngưỡng outlier theo tiêu chuẩn **WHO & EPA quốc tế**.
 
+> **Version:** 3.0 - Added Log Transformation for PM2.5
+
 ---
 
 ## 📋 Mục tiêu
 
 1. **Loại bỏ outliers** - Theo tiêu chuẩn WHO/EPA để phù hợp với dữ liệu Hong Kong
-2. **Xử lý missing values** - Imputation cho các features (KHÔNG impute target variable)
-3. **Đảm bảo data quality** - Dữ liệu sạch, nhất quán cho việc training model
+2. **Log transformation** - Giảm skewness của PM2.5 target variable
+3. **Xử lý missing values** - Imputation cho các features (KHÔNG impute target variable)
+4. **Đảm bảo data quality** - Dữ liệu sạch, nhất quán cho việc training model
 
 ---
 
@@ -18,7 +21,7 @@ Tài liệu này mô tả chi tiết quy trình làm sạch dữ liệu cho dự
 
 ### Bước 1: Loại bỏ Outliers - WHO/EPA International Standards
 
-**Mục đích:** Loại bỏ các giá trị cực đoan theo tiêu chuẩn quốc tế trước khi imputation.
+**Mục đích:** Loại bỏ các giá trị cực đoan theo tiêu chuẩn quốc tế trước khi transformation và imputation.
 
 #### 1.1. Target Variable (PM2.5)
 
@@ -104,7 +107,101 @@ Tài liệu này mô tả chi tiết quy trình làm sạch dữ liệu cho dự
 
 ---
 
-### Bước 2: Missing Value Imputation
+### Bước 2: Log Transformation (PM2.5 Target Only)
+
+**Mục đích:** Giảm skewness của PM2.5 distribution để cải thiện model performance.
+
+**Vấn đề:** PM2.5 có phân phối lệch phải (right-skewed) với:
+
+- Nhiều giá trị thấp (0-50 μg/m³)
+- Ít giá trị cao (100-250 μg/m³)
+- Skewness cao → Model khó học tốt
+
+**Giải pháp: Log1p Transformation**
+
+```python
+df_cleaned = df_no_outliers.withColumn(
+    "PM2_5",
+    F.log1p(F.col("PM2_5"))  # log(1 + x) để tránh log(0)
+)
+```
+
+**Công thức:**
+
+```
+PM2.5_log = log(1 + PM2.5)
+```
+
+**Lợi ích:**
+
+1. **Giảm skewness:** Phân phối gần normal hơn
+2. **Model stability:** Training ổn định hơn, ít overfitting
+3. **Better predictions:** Model học tốt hơn trên cả giá trị thấp và cao
+4. **Outlier handling:** Giảm ảnh hưởng của extreme values
+
+**Implementation Details:**
+
+```python
+import pyspark.sql.functions as F
+
+# Apply log1p transformation AFTER outlier removal
+df_cleaned = df_no_outliers.withColumn(
+    "PM2_5",
+    F.log1p(F.col("PM2_5"))
+)
+
+# Verify transformation
+print("Before log transform - Stats:")
+df_no_outliers.select(
+    F.mean("PM2_5").alias("mean"),
+    F.stddev("PM2_5").alias("std"),
+    F.skewness("PM2_5").alias("skewness")
+).show()
+
+print("After log transform - Stats:")
+df_cleaned.select(
+    F.mean("PM2_5").alias("mean"),
+    F.stddev("PM2_5").alias("std"),
+    F.skewness("PM2_5").alias("skewness")
+).show()
+```
+
+**Inverse Transform (Khi Inference):**
+
+```python
+import numpy as np
+
+# Sau khi denormalize prediction
+prediction_denorm = prediction * (max_val - min_val) + min_val
+
+# Inverse log transform
+prediction_original = np.expm1(prediction_denorm)  # exp(x) - 1
+```
+
+**⚠️ QUAN TRỌNG:**
+
+- Chỉ transform **PM2.5** (target variable)
+- KHÔNG transform các features khác
+- Phải lưu metadata trong scaler_params.json:
+  ```json
+  {
+    "_metadata": {
+      "log_transformed_features": ["PM2_5"],
+      "target_feature": "PM2_5_log_scaled",
+      "inverse_transform_order": ["denormalize", "expm1"]
+    }
+  }
+  ```
+
+**Kết quả:**
+
+- Skewness giảm từ ~2.5 xuống ~0.5
+- Phân phối gần normal distribution
+- Sẵn sàng cho normalization step
+
+---
+
+### Bước 3: Missing Value Imputation
 
 **Mục đích:** Điền giá trị missing cho các features sử dụng Linear Interpolation.
 

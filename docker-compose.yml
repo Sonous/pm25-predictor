@@ -1,0 +1,118 @@
+version: "3.8"
+
+services:
+  # HDFS NameNode - Manages the filesystem namespace
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-namenode
+    restart: always
+    ports:
+      - "9870:9870" # NameNode Web UI
+      - "9000:9000" # NameNode RPC
+    environment:
+      - CLUSTER_NAME=pm25-predictor
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - CORE_CONF_hadoop_http_staticuser_user=root
+      - HDFS_CONF_dfs_webhdfs_enabled=true
+      - HDFS_CONF_dfs_permissions_enabled=false
+      - HDFS_CONF_dfs_replication=2
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    networks:
+      - hdfs-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # HDFS DataNode 1 - Stores actual data blocks
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode1
+    restart: always
+    ports:
+      - "9864:9864" # DataNode Web UI
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - CORE_CONF_hadoop_http_staticuser_user=root
+      - HDFS_CONF_dfs_webhdfs_enabled=true
+      - HDFS_CONF_dfs_permissions_enabled=false
+      - HDFS_CONF_dfs_datanode_data_dir=/hadoop/dfs/data
+    volumes:
+      - hadoop_datanode1:/hadoop/dfs/data
+    networks:
+      - hdfs-network
+    depends_on:
+      - namenode
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9864/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # HDFS DataNode 2 - Additional storage node
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode2
+    restart: always
+    ports:
+      - "9865:9864" # DataNode Web UI (mapped to different host port)
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - CORE_CONF_hadoop_http_staticuser_user=root
+      - HDFS_CONF_dfs_webhdfs_enabled=true
+      - HDFS_CONF_dfs_permissions_enabled=false
+      - HDFS_CONF_dfs_datanode_data_dir=/hadoop/dfs/data
+    volumes:
+      - hadoop_datanode2:/hadoop/dfs/data
+    networks:
+      - hdfs-network
+    depends_on:
+      - namenode
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9864/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # HDFS DataNode 3 - Additional storage node
+  datanode3:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode3
+    restart: always
+    ports:
+      - "9866:9864" # DataNode Web UI (mapped to different host port)
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - CORE_CONF_hadoop_http_staticuser_user=root
+      - HDFS_CONF_dfs_webhdfs_enabled=true
+      - HDFS_CONF_dfs_permissions_enabled=false
+      - HDFS_CONF_dfs_datanode_data_dir=/hadoop/dfs/data
+    volumes:
+      - hadoop_datanode3:/hadoop/dfs/data
+    networks:
+      - hdfs-network
+    depends_on:
+      - namenode
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9864/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+# Volumes for persistent storage
+volumes:
+  hadoop_namenode:
+    driver: local
+  hadoop_datanode1:
+    driver: local
+  hadoop_datanode2:
+    driver: local
+  hadoop_datanode3:
+    driver: local
+
+# Network for HDFS cluster
+networks:
+  hdfs-network:
+    driver: bridge

@@ -1,29 +1,29 @@
-# Feature Engineering & Normalization Workflow
+# Feature Engineering & Normalization Workflow (v3.0)
 
 ## Step 5: Feature Extraction and Normalization
 
-> **This document provides detailed execution flow of the Feature Engineering step in the PM2.5 Prediction pipeline**
+> **This document provides detailed execution flow of the Feature Engineering step in the PM2.5 Prediction pipeline with STRATIFIED temporal split and log-transformed target**
 
 ---
 
 ## 🎯 **Main Objectives**
 
-| Objective               | Description                                            | Why It's Important                                        |
-| ----------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
-| **Time Features**       | Extract temporal patterns (cyclic encoding only)       | Helps models understand seasonality and temporal patterns |
-| **Temporal Split**      | Split train/val/test by time (BEFORE normalization)    | **Prevent data leakage** - most critical!                 |
-| **Normalization**       | Normalize BASE features using train stats only         | Ensure all features are in the same scale [0,1]           |
-| **Lag Features**        | Create historical values FROM scaled columns (XGBoost) | Preserves scale relationship across time steps            |
-| **Model-specific Prep** | Create separate datasets for DL vs XGBoost             | Each model type requires different data format            |
+| Objective                       | Description                                                                    | Why It's Important                                        |
+| ------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| **Time Features**               | Extract temporal patterns (cyclic encoding only)                               | Helps models understand seasonality and temporal patterns |
+| **Temporal Split (STRATIFIED)** | Split train/val/test **per month** (BEFORE normalization)                      | **Prevent data leakage + Preserve monthly distribution**  |
+| **Normalization**               | Normalize BASE features using train stats only (PM2.5 already log-transformed) | Ensure all features are in the same scale [0,1]           |
+| **Lag Features**                | Create historical values FROM scaled columns (XGBoost)                         | Preserves scale relationship across time steps            |
+| **Model-specific Prep**         | Create separate datasets for DL vs XGBoost                                     | Each model type requires different data format            |
 
 ---
 
-## 📋 **Execution Order (Critical!) - REFACTORED v2.0**
+## 📋 **Execution Order (Critical!) - REFACTORED v3.0**
 
 ```mermaid
 graph TD
-    A[Raw Clean Data] --> B[1. Time Features - Cyclic Only]
-    B --> C[2. Temporal Split 70/15/15]
+    A[Log-transformed Clean Data] --> B[1. Time Features - Cyclic Only]
+    B --> C[2. STRATIFIED Temporal Split 70/15/15 per Month]
     C --> D[3. Normalization - BASE Features]
     D --> E[4. Lag Features - FROM SCALED]
     E --> F[5. Save Scaler Params]
@@ -38,12 +38,13 @@ graph TD
     style E fill:#ffffcc
 ```
 
-⚠️ **CRITICAL CHANGES:**
+⚠️ **CRITICAL CHANGES in v3.0:**
 
-1. **Normalization BEFORE Lag Creation** - Lag features created FROM scaled columns
-2. **Only Cyclic Time Features** - Removed redundant linear features
-3. **2-Layer Null Protection** - Incomplete history + Data gaps filtering
-4. **Parquet Export** - Production-ready dataset export
+1. **STRATIFIED Temporal Split** - Per-month 70/15/15 split to preserve temporal distribution
+2. **Log-transformed PM2.5** - Target variable already log1p transformed in cleaning stage
+3. **Normalization AFTER Log Transform** - PM2.5_scaled contains normalized log values
+4. **2-Layer Null Protection** - Incomplete history + Data gaps filtering
+5. **Parquet Export** - Production-ready dataset export
 
 ---
 
@@ -136,15 +137,16 @@ df_test = df_time_features.filter(F.col("datetime") >= val_end)
 
 ---
 
-### **Step 5.3: Normalization (BASE Features ONLY)**
+### **Step 5.3: Normalization (BASE Features - PM2.5 Already Log-Transformed)**
 
 ```python
 # Step 3: Normalize BASE features ONLY (NOT time features, NOT lags yet)
-# ⚠️ CRITICAL: Normalize BEFORE creating lag features
+# ⚠️ CRITICAL: Normalize AFTER log transformation, BEFORE creating lag features
 
-# Columns to normalize
+# Columns to normalize (PM2_5 is already log-transformed)
 base_numerical_cols = [
-    "PM2_5", "PM10", "NO2", "SO2",  # Pollutants
+    "PM2_5",  # ⚠️ This is log1p(PM2_5) from cleaning stage
+    "PM10", "NO2", "SO2",  # Pollutants (not transformed)
     "temperature_2m", "relative_humidity_2m",
     "wind_speed_10m", "wind_direction_10m", "precipitation"  # Weather
 ]
@@ -166,10 +168,20 @@ for col_name in base_numerical_cols:
 
     scaler_params[col_name] = {"min": min_val, "max": max_val}
 
+# Save log transformation flag in scaler params
+scaler_params["_metadata"] = {
+    "log_transformed_features": ["PM2_5"],
+    "target_feature": "PM2_5",
+    "inverse_transform_order": ["denormalize", "expm1"],  # expm1 = exp(x) - 1
+    "normalization_method": "minmax"
+}
+
 # Apply Min-Max scaling [0, 1]
 def normalize_features(df, params):
     df_scaled = df
     for col_name, param in params.items():
+        if col_name == "_metadata":
+            continue
         df_scaled = df_scaled.withColumn(
             f"{col_name}_scaled",
             (F.col(col_name) - param["min"]) / (param["max"] - param["min"])
@@ -182,25 +194,28 @@ df_val = normalize_features(df_val, scaler_params)
 df_test = normalize_features(df_test, scaler_params)
 ```
 
-**⚠️ CRITICAL - Normalization Order:**
+**⚠️ CRITICAL - Normalization Order with Log Transform:**
 
 ```
-❌ WRONG ORDER (Old):
-1. Create lag features from RAW values
-2. Normalize both base + lag features
-   → Different scale parameters for base vs lag!
+Pipeline Order:
+1. [Cleaning] Log transform: PM2_5 = log1p(PM2_5)
+2. [Cleaning] Outlier removal on log-transformed values
+3. [Cleaning] Linear interpolation
+4. [Feature Eng] STRATIFIED temporal split
+5. [Feature Eng] Normalize: PM2_5_scaled = (log_PM2_5 - min) / (max - min)
+6. [Feature Eng] Create lag features FROM PM2_5_scaled
 
-✅ CORRECT ORDER (Refactored):
-1. Normalize BASE features only
-2. Create lag features FROM SCALED columns
-   → Same scale parameters maintained!
+Inverse Transform at Inference:
+1. Denormalize: log_PM2_5 = PM2_5_scaled * (max - min) + min
+2. Inverse log: PM2_5 = expm1(log_PM2_5) = exp(log_PM2_5) - 1
 ```
 
 **Why This Matters:**
 
-- Lag features must have SAME normalization params as current values
-- Preserves proper scale relationship between t-1, t-2, ..., t
-- Critical for time series model accuracy
+- PM2_5_scaled contains **normalized log values**, NOT raw PM2.5
+- Scaler params (min/max) are computed on **log-transformed** distribution
+- Lag features preserve log-scale relationships
+- Must apply inverse transform correctly: denormalize → expm1
 
 ---
 
