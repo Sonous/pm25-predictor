@@ -1,0 +1,102 @@
+{
+  "metadata": {
+    "train_samples": 186915,
+    "val_samples": 49284,
+    "test_samples": 50942,
+    "sequence_length": 24,
+    "num_features": 17
+  },
+  "target_statistics": {
+    "train": {
+      "count": 186915,
+      "mean": 15.44517707824707,
+      "median": 13.399998664855957,
+      "std": 10.089425086975098,
+      "min": 0.0,
+      "q1": 8.199999809265137,
+      "q3": 20.5,
+      "max": 152.39999389648438,
+      "iqr": 12.300000190734863
+    },
+    "val": {
+      "count": 49284,
+      "mean": 22.583498001098633,
+      "median": 19.69999885559082,
+      "std": 13.387529373168945,
+      "min": 0.0,
+      "q1": 13.09999942779541,
+      "q3": 28.999998092651367,
+      "max": 166.09999084472656,
+      "iqr": 15.899998664855957
+    },
+    "test": {
+      "count": 50942,
+      "mean": 10.073689460754395,
+      "median": 8.399999618530273,
+      "std": 6.857837200164795,
+      "min": 0.0,
+      "q1": 5.400000095367432,
+      "q3": 13.09999942779541,
+      "max": 182.49998474121094,
+      "iqr": 7.6999993324279785
+    }
+  },
+  "quality_checks": {
+    "nan_check": {
+      "train_X": 0.0,
+      "train_y": 0.0,
+      "status": "\u2705 Good"
+    },
+    "infinite_check": {
+      "train_X": 0,
+      "train_y": 0,
+      "status": "\u2705 Good"
+    },
+    "range_check": {
+      "X_min": -1.0,
+      "X_max": 1.0,
+      "y_min": 0.0,
+      "y_max": 1.0,
+      "status": "\u26a0\ufe0f  Warning"
+    },
+    "distribution_check": {
+      "skewness": 1.5281780170093244,
+      "kurtosis": 4.960719549052224,
+      "status": "\u26a0\ufe0f  Skewed"
+    },
+    "outlier_check": {
+      "outlier_count": 5317,
+      "outlier_percentage": 2.844608511890432,
+      "status": "\u2705 Good"
+    },
+    "correlation_check": {
+      "avg_correlation": 0.2090658464807483,
+      "max_correlation": 0.5439695203700786,
+      "status": "\u2705 Good"
+    },
+    "temporal_check": {
+      "temporal_variance": 0.0840192511677742,
+      "status": "\u2705 Good"
+    },
+    "leakage_check": {
+      "train_mean": 15.44517707824707,
+      "val_mean": 22.583498001098633,
+      "test_mean": 10.073689460754395,
+      "status": "\u26a0\ufe0f  Warning"
+    }
+  },
+  "summary": {
+    "nan_check": "\u2705 Good",
+    "infinite_check": "\u2705 Good",
+    "range_check": "\u26a0\ufe0f  Warning",
+    "distribution_check": "\u26a0\ufe0f  Skewed",
+    "outlier_check": "\u2705 Good",
+    "correlation_check": "\u2705 Good",
+    "temporal_check": "\u2705 Good",
+    "leakage_check": "\u26a0\ufe0f  Warning"
+  },
+  "recommendations": [
+    "Target is highly skewed - consider log transformation",
+    "Check for potential data leakage or distribution shift"
+  ]
+}
